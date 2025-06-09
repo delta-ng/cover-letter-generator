@@ -15,7 +15,13 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+try:
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+except TypeError:
+    # Fallback for older versions
+    import openai
+    openai.api_key = os.getenv('OPENAI_API_KEY')
+    client = openai
 
 def extract_text_from_pdf(file):
     """Extract text from PDF file"""
@@ -32,34 +38,64 @@ def extract_text_from_docx(file):
 def generate_cover_letter(resume_text, job_description):
     """Generate cover letter using OpenAI's API"""
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a professional career advisor who helps write compelling cover letters."},
-                {"role": "user", "content": f"Based on the following resume and job description, write a professional and compelling cover letter.\n\nResume:\n{resume_text}\n\nJob Description:\n{job_description}"}
-            ],
-            temperature=0.7,
-            max_tokens=1000
-        )
-        return response.choices[0].message.content
+        if hasattr(client, 'chat') and hasattr(client.chat, 'completions'):
+            # New client format (v1.0.0+)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that writes professional cover letters."},
+                    {"role": "user", "content": f"Write a professional cover letter based on this resume:\n\n{resume_text}\n\nAnd this job description:\n\n{job_description}"}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
+        else:
+            # Old client format
+            response = client.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that writes professional cover letters."},
+                    {"role": "user", "content": f"Write a professional cover letter based on this resume:\n\n{resume_text}\n\nAnd this job description:\n\n{job_description}"}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response['choices'][0]['message']['content']
     except Exception as e:
-        return f"Error generating cover letter: {str(e)}"
+        st.error(f"Error generating cover letter: {str(e)}")
+        return ""
 
 def improve_cover_letter(cover_letter, instructions):
     """Improve the cover letter based on user instructions"""
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a professional career advisor who helps improve cover letters."},
-                {"role": "user", "content": f"Here's a cover letter that needs improvement based on these instructions: {instructions}\n\nCurrent Cover Letter:\n{cover_letter}"}
-            ],
-            temperature=0.7,
-            max_tokens=1000
-        )
-        return response.choices[0].message.content
+        if hasattr(client, 'chat') and hasattr(client.chat, 'completions'):
+            # New client format (v1.0.0+)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that improves cover letters."},
+                    {"role": "user", "content": f"Here's my current cover letter:\n\n{cover_letter}\n\nPlease make these improvements: {instructions}"}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
+        else:
+            # Old client format
+            response = client.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that improves cover letters."},
+                    {"role": "user", "content": f"Here's my current cover letter:\n\n{cover_letter}\n\nPlease make these improvements: {instructions}"}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response['choices'][0]['message']['content']
     except Exception as e:
-        return f"Error improving cover letter: {str(e)}"
+        st.error(f"Error improving cover letter: {str(e)}")
+        return ""
 
 def main():
     st.set_page_config(page_title="Cover Letter Generator", page_icon="📝", layout="wide")
@@ -67,6 +103,7 @@ def main():
     st.title("📝 AI-Powered Cover Letter Generator")
     st.write("Upload your resume and enter a job description to generate a personalized cover letter.")
     
+    # Initialize session state
         # Initialize session state
     if 'cover_letter' not in st.session_state:
         st.session_state.cover_letter = ""
@@ -83,8 +120,15 @@ def main():
 USER_DATA_FILE = 'user_data.json'
 ACCESS_CODES_FILE = 'access_codes.json'
 MAX_GENERATIONS = 5  # Number of cover letter generations per code
-MAX_IMPROVEMENTS = 10  # Number of improvements per cover letter
-CODE_LENGTH = 8
+MAX_IMPROVEMENTS = 10  # Number of improvements allowed per generation
+CREDITS_PER_CODE = 5  # Default number of generations per access code
+
+# Ensure access_codes.json exists with an initial admin code
+if not os.path.exists(ACCESS_CODES_FILE):
+    initial_codes = {"ADMIN01": CREDITS_PER_CODE}
+    with open(ACCESS_CODES_FILE, 'w') as f:
+        json.dump(initial_codes, f)
+    print(f"Created initial access code: ADMIN01 with {CREDITS_PER_CODE} generations")
 
 def generate_access_code(length=8):
     """Generate a random alphanumeric access code."""
