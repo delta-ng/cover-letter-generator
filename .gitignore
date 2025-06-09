@@ -20,6 +20,28 @@ wheels/
 .installed.cfg
 *.egg
 
+# Environment variables
+.env
+
+# Sensitive files
+access_codes.json
+user_data.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
 # Virtual Environment
 venv/
 ENV/
